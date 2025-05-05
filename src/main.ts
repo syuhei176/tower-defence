@@ -6,7 +6,10 @@ type CellType = 0 | 1; // 0: 空き, 1: タワー
 
 let money = 100;
 let life = 10;
-const towerCost = 20;
+const towerCost = 25;
+const ENEMY_ATTACK_RANGE = 4;
+let initialHp = 10;
+let initialTowerHp = 10;
 
 const grid: CellType[][] = Array.from({ length: GRID_HEIGHT }, () =>
   Array.from({ length: GRID_WIDTH }, () => 0)
@@ -37,11 +40,81 @@ async function main() {
     return finder.findPath(startX, startY, goalX, goalY, pfGrid);
   }
 
-  const enemies: Enemy[] = [];
+  let enemies: Enemy[] = [];
   let spawnCounter = 0;
   let towerAttackCounter = 0;
   const projectiles: Projectile[] = [];
+  const enemyProjectiles: EnemyProjectile[] = [];
+  const towers: (Tower | null)[][] = Array.from({ length: GRID_HEIGHT }, () =>
+    Array.from({ length: GRID_WIDTH }, () => null)
+  );
 
+  class Tower {
+    x: number;
+    y: number;
+    hp: number = 10;
+    maxHp: number = 10;
+    barBg: Graphics;
+    bar: Graphics;
+  
+    constructor(x: number, y: number, initialHp: number = 10) {
+      this.x = x;
+      this.y = y;
+      this.hp = initialHp;
+      this.maxHp = initialHp;
+  
+      const px = x * CELL_SIZE;
+      const py = y * CELL_SIZE;
+  
+      this.barBg = new Graphics();
+      this.barBg.beginFill(0x333333);
+      this.barBg.drawRect(0, 0, CELL_SIZE, 4);
+      this.barBg.endFill();
+      this.barBg.x = px;
+      this.barBg.y = py - 6;
+  
+      this.bar = new Graphics();
+      this.bar.beginFill(0x00ccff);
+      this.bar.drawRect(0, 0, CELL_SIZE, 4);
+      this.bar.endFill();
+      this.bar.x = px;
+      this.bar.y = py - 6;
+  
+      app.stage.addChild(this.barBg);
+      app.stage.addChild(this.bar);
+    }
+  
+    updateBar() {
+      const hpRatio = this.hp / this.maxHp;
+      this.bar.scale.x = hpRatio;
+    }
+  
+    takeDamage(dmg: number) {
+      this.hp -= dmg;
+      if (this.hp <= 0) {
+        destroyTower(this.x, this.y);
+      } else {
+        this.updateBar();
+      }
+    }
+  
+    destroy() {
+      app.stage.removeChild(this.bar);
+      app.stage.removeChild(this.barBg);
+    }
+  }
+  
+
+  function destroyTower(x: number, y: number) {
+    const tower = towers[y][x];
+    if (tower) {
+      tower.destroy();
+      towers[y][x] = null;
+    }
+    grid[y][x] = 0;
+    drawGrid();
+  }
+  
   function gameOver() {
     const text = new Text({
       text: 'Game Over',
@@ -119,9 +192,53 @@ async function main() {
       app.stage.removeChild(this.sprite);
       projectiles.splice(projectiles.indexOf(this), 1);
 
-      // 💰 敵を倒した報酬
-      money += 8;
       updateUI();
+    }
+  }
+
+  class EnemyProjectile {
+    sprite = new Graphics();
+    x: number;
+    y: number;
+    target: Tower;
+    speed = 4;
+  
+    constructor(fromX: number, fromY: number, target: Tower) {
+      this.x = fromX;
+      this.y = fromY;
+      this.target = target;
+  
+      this.sprite.beginFill(0xff6600); // オレンジ弾
+      this.sprite.drawCircle(0, 0, 4);
+      this.sprite.endFill();
+      app.stage.addChild(this.sprite);
+      this.updatePosition();
+    }
+  
+    updatePosition() {
+      this.sprite.x = this.x * CELL_SIZE + CELL_SIZE / 2;
+      this.sprite.y = this.y * CELL_SIZE + CELL_SIZE / 2;
+    }
+  
+    update(): boolean {
+      const dx = this.target.x - this.x;
+      const dy = this.target.y - this.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < 0.1) {
+        this.target.takeDamage(1);
+        this.destroy();
+        return false;
+      }
+  
+      this.x += (dx / dist) * (this.speed / CELL_SIZE);
+      this.y += (dy / dist) * (this.speed / CELL_SIZE);
+      this.updatePosition();
+      return true;
+    }
+  
+    destroy() {
+      app.stage.removeChild(this.sprite);
+      enemyProjectiles.splice(enemyProjectiles.indexOf(this), 1);
     }
   }
 
@@ -134,11 +251,15 @@ async function main() {
     hpBar = new Graphics();
     path: number[][] = [];
     pathIndex = 0;
-    hp = 3;
-    maxHp = 3;
+    hp = 10;
+    maxHp = 10;
+    attackTurn = false
+    isRemoved = false;
 
-    constructor() {
+    constructor({initialHp = 10}) {
       // 敵の本体
+      this.hp = initialHp;
+      this.maxHp = initialHp;
       this.sprite.beginFill(0xff0000);
       this.sprite.drawRect(0, 0, CELL_SIZE, CELL_SIZE);
       this.sprite.endFill();
@@ -182,6 +303,8 @@ async function main() {
     }
 
     move() {
+      if (this.checkAndAttackTower()) return; // 攻撃したらそのターンは移動しない
+
       if (this.pathIndex < this.path.length - 1) {
         this.pathIndex++;
         [this.x, this.y] = this.path[this.pathIndex];
@@ -210,10 +333,49 @@ async function main() {
     }
 
     destroy() {
+      if (this.isRemoved) return;
       app.stage.removeChild(this.sprite);
       app.stage.removeChild(this.hpBar);
       app.stage.removeChild(this.hpBarBg);
-      enemies.splice(enemies.indexOf(this), 1);
+      this.isRemoved = true;
+      // enemies.splice(enemies.indexOf(this), 1);
+
+      if (initialHp < 80) {
+        initialHp += 1;
+      }
+
+      if (initialTowerHp < 20) {
+        initialTowerHp += 1;
+      }
+
+      // 💰 敵を倒した報酬
+      money += 10;
+
+    }
+
+    checkAndAttackTower(): boolean {
+      if (!this.attackTurn) {
+        this.attackTurn = true;
+        return false;
+      }
+      this.attackTurn = false;
+      for (let y = 0; y < GRID_HEIGHT; y++) {
+        for (let x = 0; x < GRID_WIDTH; x++) {
+          const tower = towers[y][x];
+          if (tower) {
+            const dx = tower.x - this.x;
+            const dy = tower.y - this.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+    
+            if (dist <= ENEMY_ATTACK_RANGE) {
+              // 射程範囲内なら攻撃（弾を発射）
+              enemyProjectiles.push(new EnemyProjectile(this.x, this.y, tower));
+              return true; // 1ターン1回のみ攻撃
+            }
+          }
+        }
+      }
+      return false;
     }
   }
 
@@ -226,6 +388,7 @@ async function main() {
 
     if (grid[y]?.[x] === 0 && money >= towerCost) {
       grid[y][x] = 1;
+      towers[y][x] = new Tower(x, y, initialTowerHp);
       money -= towerCost;
       drawGrid();
       updateUI();
@@ -244,7 +407,6 @@ async function main() {
 
     for (let y = 0; y < GRID_HEIGHT; y++) {
       for (let x = 0; x < GRID_WIDTH; x++) {
-        console.log(grid[y][x]);
 
         if (grid[y][x] === 1) {
           graphics.beginFill(0x00ccff);
@@ -272,7 +434,7 @@ async function main() {
     towerAttackCounter++;
 
     if (spawnCounter % 180 === 0) {
-      const enemy = new Enemy();
+      const enemy = new Enemy({initialHp: initialHp});
       enemies.push(enemy);
     }
 
@@ -280,6 +442,8 @@ async function main() {
       for (const enemy of enemies) {
         enemy.move();
       }
+
+      enemies = enemies.filter(enemy => !enemy.isRemoved);
     }
 
     // 🔫 タワーからの攻撃処理
@@ -304,6 +468,10 @@ async function main() {
 
     // 弾の移動処理
     for (const p of [...projectiles]) {
+      p.update();
+    }
+
+    for (const p of [...enemyProjectiles]) {
       p.update();
     }
   });
