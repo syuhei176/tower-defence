@@ -344,12 +344,12 @@ async function main() {
         initialHp += 1;
       }
 
-      if (initialTowerHp < 20) {
+      if (initialTowerHp < 40) {
         initialTowerHp += 1;
       }
 
       // 💰 敵を倒した報酬
-      money += 10;
+      money += 11;
 
     }
 
