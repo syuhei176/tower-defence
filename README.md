@@ -118,6 +118,19 @@ npm run preview
 pnpm preview
 ```
 
+### Deployment
+
+The game is automatically deployed to GitHub Pages when changes are pushed to the `main` branch.
+
+**Setup GitHub Pages (one-time setup):**
+1. Go to your repository settings
+2. Navigate to **Pages** (under "Code and automation")
+3. Under **Build and deployment**, set:
+   - **Source**: GitHub Actions
+4. The workflow will automatically deploy on the next push to main
+
+Once deployed, the game will be available at: `https://syuhei176.github.io/tower-defence/`
+
 ## Game Design Details
 
 ### Grid System
