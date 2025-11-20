@@ -22,7 +22,7 @@ export class TitleScene extends Container {
       text: "TOWER DEFENCE",
       style: {
         fontFamily: "Arial",
-        fontSize: "64px",
+        fontSize: "32px",
         fill: "#00ff88",
         fontWeight: "bold",
       },
@@ -194,7 +194,7 @@ export class TitleScene extends Container {
     });
     instructionText.anchor.set(0.5);
     instructionText.x = (CELL_SIZE * GRID_WIDTH) / 2;
-    instructionText.y = (CELL_SIZE * GRID_HEIGHT * 3) / 4 + 40;
+    instructionText.y = (CELL_SIZE * GRID_HEIGHT * 3) / 4 + 80;
     this.addChild(instructionText);
 
     // Start button hover effect

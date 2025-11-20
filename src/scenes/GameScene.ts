@@ -381,6 +381,8 @@ export class GameScene extends Container {
   private ENEMY_ATTACK_RANGE = 4;
   private initialHp = 15;
   private initialTowerHp = 20;
+  private defeatedEnemies = 0;
+  private readonly ENEMIES_TO_WIN = 100;
 
   private grid: CellType[][];
   private graphics: Graphics;
@@ -410,7 +412,7 @@ export class GameScene extends Container {
 
     // UI Text
     this.uiText = new Text({
-      text: `💰 ${this.money}　❤️ ${this.life}`,
+      text: `💰 ${this.money}　❤️ ${this.life}　🏆 ${this.defeatedEnemies}/${this.ENEMIES_TO_WIN}`,
       style: {
         fontFamily: "Arial",
         fontSize: "18px",
@@ -450,9 +452,21 @@ export class GameScene extends Container {
   }
 
   public incrementEnemyStats() {
-    if (this.initialHp < 80) {
-      this.initialHp += 1;
+    this.defeatedEnemies++;
+    this.updateUI();
+
+    // Check for game clear
+    if (this.defeatedEnemies >= this.ENEMIES_TO_WIN) {
+      this.gameClear();
+      return;
     }
+
+    // Gradually increase enemy HP every 5 defeats
+    if (this.defeatedEnemies % 5 === 0) {
+      this.initialHp += 2;
+    }
+
+    // Gradually increase tower HP
     if (this.initialTowerHp < 40) {
       this.initialTowerHp += 1;
     }
@@ -495,7 +509,7 @@ export class GameScene extends Container {
   }
 
   private updateUI() {
-    this.uiText.text = `💰 ${this.money}　❤️ ${this.life}`;
+    this.uiText.text = `💰 ${this.money}　❤️ ${this.life}　🏆 ${this.defeatedEnemies}/${this.ENEMIES_TO_WIN}`;
   }
 
   public destroyTower(x: number, y: number) {
@@ -521,6 +535,36 @@ export class GameScene extends Container {
     text.x = (CELL_SIZE * GRID_WIDTH) / 2;
     text.y = (CELL_SIZE * GRID_HEIGHT) / 2;
     this.addChild(text);
+
+    this.app.ticker.stop();
+  }
+
+  public gameClear() {
+    const text = new Text({
+      text: "GAME CLEAR!",
+      style: {
+        fontFamily: "Arial",
+        fontSize: "48px",
+        fill: "#00ff88",
+      },
+    });
+    text.anchor.set(0.5);
+    text.x = (CELL_SIZE * GRID_WIDTH) / 2;
+    text.y = (CELL_SIZE * GRID_HEIGHT) / 2;
+    this.addChild(text);
+
+    const subText = new Text({
+      text: `You defeated ${this.defeatedEnemies} enemies!`,
+      style: {
+        fontFamily: "Arial",
+        fontSize: "24px",
+        fill: "#ffffff",
+      },
+    });
+    subText.anchor.set(0.5);
+    subText.x = (CELL_SIZE * GRID_WIDTH) / 2;
+    subText.y = (CELL_SIZE * GRID_HEIGHT) / 2 + 60;
+    this.addChild(subText);
 
     this.app.ticker.stop();
   }
